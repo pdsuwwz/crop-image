@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>图片裁剪</title>
+  <style>
+
+    *{
+      margin: 0;
+      padding: 0;
+    }
+
+    .image-box{
+      position: relative;
+      width: 500px;
+      height: 500px;
+      margin: 100px auto;
+      background: url("./image/img-test.jpg") no-repeat;
+      background-position: center;
+      background-size: cover;
+    }
+    
+
+
+    /* 边框八角外包裹 */
+
+    .crop-handler {
+      position: absolute;
+      display: inline-block;
+      width: 200px;
+      height: 200px;
+      cursor: move;
+      z-index: 1;
+    }
+
+    /* 边框八角方块 */
+
+    .crop-handle {
+      position: absolute;
+      background-color: #333333;
+      border: 1px #eeeeee solid;
+      width: 7px;
+      height: 7px;
+      font-size: 1px;
+    }
+
+    .crop-handle.ord-n {
+      left: 50%;
+      margin-left: -4px;
+      margin-top: -4px;
+      top: 0;
+      cursor: n-resize;
+    }
+
+    .crop-handle.ord-s {
+      bottom: 0;
+      left: 50%;
+      margin-bottom: -4px;
+      margin-left: -4px;
+      cursor: s-resize;
+    }
+
+    .crop-handle.ord-e {
+      margin-right: -4px;
+      margin-top: -4px;
+      right: 0;
+      top: 50%;
+      cursor: e-resize;
+    }
+
+    .crop-handle.ord-w {
+      left: 0;
+      margin-left: -4px;
+      margin-top: -4px;
+      top: 50%;
+      cursor: w-resize;
+    }
+
+    .crop-handle.ord-nw {
+      left: 0;
+      margin-left: -4px;
+      margin-top: -4px;
+      top: 0;
+      cursor: nw-resize;
+    }
+
+    .crop-handle.ord-ne {
+      margin-right: -4px;
+      margin-top: -4px;
+      right: 0;
+      top: 0;
+      cursor: ne-resize;
+    }
+
+    .crop-handle.ord-se {
+      bottom: 0;
+      margin-bottom: -4px;
+      margin-right: -4px;
+      right: 0;
+      cursor: se-resize;
+    }
+
+    .crop-handle.ord-sw {
+      bottom: 0;
+      left: 0;
+      margin-bottom: -4px;
+      margin-left: -4px;
+      cursor: sw-resize;
+    }
+
+    /* 图片蒙层 */
+
+    .crop-mask-wrap {
+      width: 500px;
+      height: 500px;
+      background-color: rgba(0, 0, 0, .5);
+      transition: .3s;
+      cursor: crosshair;
+    }
+
+    .crop-mask {
+      position: absolute;
+      display: inline-block;
+      width: 200px;
+      height: 200px;
+      overflow: hidden;
+    }
+
+    .crop-mask .crop-tracker {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: url("./image/img-test.jpg") no-repeat;
+      background-position: center;
+      background-size: cover;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="image-box" id="js_image_box"></div>
+  <script src="http://code.jquery.com/jquery-3.3.1.min.js"></script>
+  <script>
+
+    var Crop = (function (doc, win) {
+      var DataTemp = ['<div class="crop-wrap">',
+      '    <div class="crop-handler" id="js_crop_handler">',
+      '      <div class="crop-handle ord-n"></div>',
+      '      <div class="crop-handle ord-s"></div>',
+      '      <div class="crop-handle ord-e"></div>',
+      '      <div class="crop-handle ord-w"></div>',
+      '      <div class="crop-handle ord-nw"></div>',
+      '      <div class="crop-handle ord-ne"></div>',
+      '      <div class="crop-handle ord-se"></div>',
+      '      <div class="crop-handle ord-sw"></div>',
+      '    </div>',
+      '    <div class="crop-mask-wrap">',
+      '      <div class="crop-mask" id="js_crop_mask">',
+      '        <div class="crop-tracker" id="js_crop_tracker"></div>',
+      '      </div>',
+      '    </div>',
+      '  </div>'].join("");
+      
+      /*
+      * 赋值函数  
+      */
+      function setStyle(obj, option, value) {
+        switch (option) {
+          case 'width':
+            obj.style.width = value;
+            break;
+          case 'height':
+            obj.style.height = value;
+            break;
+          case 'top':
+            obj.style.top = value;
+            break;
+          case 'left':
+            obj.style.left = value;
+            break;
+          case 'position':
+            obj.style.position = value;
+            break;
+          case 'cursor':
+            obj.style.cursor = value;
+        }
+      }
+      
+      function Crop(config) {
+        this.box = $(config.box);
+        var htmlStr = DataTemp;
+        this.box.empty();
+        this.box.append(htmlStr);
+        _init(this);
+        _bindEvent(this);
+      }
+
+      // 裁剪函数初始化
+      var _init = function (that) {
+        var js_crop_handler = that.box.find("#js_crop_handler").get(0);
+        // var js_crop_mask = that.box.find("#js_crop_mask");
+        // var js_crop_tracker = that.box.find("#js_crop_tracker");
+        // js_crop_handler.css({ left: "50px" });
+        // js_crop_mask.css({ left: "50px" });
+        // js_crop_tracker.css({ left: "-50px" });
+
+        // 取消鼠标默认拖拽事件
+        js_crop_handler.ondragstart = function() {
+          return false;
+        };
+        return that;
+      }
+
+      /*  css 获取  */
+      function getCss(o, key){
+        return o.currentStyle ? o.currentStyle[key] : document.defaultView.getComputedStyle(o, false)[key];   
+      };
+
+      // 鼠标移动相关事件绑定
+      function _bindEvent(that){
+        var js_crop_handler = that.box.find("#js_crop_handler").get(0);
+        var js_crop_wrap = that.box.find(".crop-mask-wrap").get(0);
+        _centerMouse(that, js_crop_handler);
+        _maskRelease(that, js_crop_wrap);
+      }
+      
+      // 越界判定, 设置裁剪框不可超越图片
+      function _crossingBreak(that, el_x, el_y, box_x, box_y, off_x, off_y){
+        var $js_crop_handler = that.box.find("#js_crop_handler");
+        var rightDiff = that.box.width() - el_x - $js_crop_handler.width();
+        var bottomDiff = that.box.height() - el_y - $js_crop_handler.height();
+        // 左边界
+        if(el_x <= 0){
+          _setPosition(that, 0, box_y, 0, off_y);
+        }
+        // 上边界
+        if(el_y <= 0){
+          _setPosition(that, box_x, 0, off_x, 0);
+        }
+        // 左上
+        if(el_y <= 0 && el_x <= 0){
+          _setPosition(that, 0, 0, 0, 0);
+        }
+        // 右边界
+        if(rightDiff <= 0){
+          _setPosition(that, rightDiff + el_x, box_y, 0, off_y);
+        }
+        // 右上
+        if(el_y <= 0 && rightDiff <= 0){
+          _setPosition(that, rightDiff + el_x, 0, 0, 0);
+        }
+        // 下边界
+        if(bottomDiff <= 0){
+          _setPosition(that, box_x, 0, off_x, bottomDiff + el_y);
+        }
+        // 左下
+        if(bottomDiff <= 0 && el_x <= 0){
+          _setPosition(that, 0, 0, 0, bottomDiff + el_y);
+        }
+        // 右下
+        if(bottomDiff <= 0 && rightDiff <= 0){
+          _setPosition(that, rightDiff + el_x, 0, 0, bottomDiff + el_y);
+        }
+      }
+
+      // 设置移动中边框的位置
+      function _setPosition(that, box_x, box_y, off_x, off_y){
+        var js_crop_handler = that.box.find("#js_crop_handler").get(0);
+        var js_crop_mask = that.box.find("#js_crop_mask").get(0);
+        var js_crop_tracker = that.box.find("#js_crop_tracker").get(0);
+        setStyle(js_crop_handler, "left", box_x + off_x + "px");
+        setStyle(js_crop_handler, "top", box_y + off_y + "px");
+        setStyle(js_crop_mask, "left", box_x + off_x + "px");
+        setStyle(js_crop_mask, "top", box_y + off_y + "px");
+        setStyle(js_crop_tracker, "left",  - (box_x + off_x) + "px");
+        setStyle(js_crop_tracker, "top",  - (box_y + off_y) + "px");
+      }
+
+      // 取消选择裁剪边框
+      function _maskRelease(that, js_crop_wrap){
+        js_crop_wrap.onclick = function(e){
+          var oEvent = e || window.event;
+          that.box.empty();
+          oEvent.preventDefault();
+        }
+      }
+
+      // 预览边框总方法
+      function _centerMouse(that, el){
+        _bindmouseDown(that, el);
+      }
+
+      // 裁剪边框鼠标按下事件
+      function _bindmouseDown(that, el){
+        el.onmousedown = function(e){
+          // 防止右键导致裁剪框偏移量异常
+          if(e.button === 2){
+            return false;
+          }
+          var oEvent = e || window.event;
+          // 保存移动之前边框的初始坐标
+          var box_x = js_crop_handler.offsetLeft;
+          var box_y = js_crop_handler.offsetTop;
+          // 保存点击时鼠标的坐标
+          var ck_x = oEvent.clientX;
+          var ck_y = oEvent.clientY;
+          _bindmouseMove(that, el, box_x, box_y, ck_x, ck_y);
+          _bindmouseUp();
+        }
+      }
+      
+      // 裁剪边框鼠标按下后移动事件
+      function _bindmouseMove(that, el, box_x, box_y, ck_x, ck_y){
+        document.onmousemove = function(e){
+          var oEvent = e || window.event;
+          // 获取移动的坐标差值
+          var off_x = e.clientX - ck_x;
+          var off_y = e.clientY - ck_y;
+          _setPosition(that, box_x, box_y, off_x, off_y);
+          _crossingBreak(that, el.offsetLeft, el.offsetTop, box_x, box_y, off_x, off_y);
+        }
+      }
+      
+      // 裁剪边框鼠标松开事件
+      function _bindmouseUp(){
+        document.onmouseup = function(e){
+          var oEvent = e || window.event;
+          document.onmousemove = null;
+          oEvent.preventDefault();
+        }
+      }
+
+      // 裁剪框的拉伸
+      function _bindStretch(){
+        
+      }
+      
+      
+      
+      return Crop;
+    })(document, window)
+  </script>
+
+  <script>
+    window.onload = function(){
+      var mycrop = new Crop({
+        box: "#js_image_box",
+      });
+    }
+  </script>
+
+</body>
+
+</html>
